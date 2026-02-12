@@ -22,21 +22,11 @@ PORT = 4173
 DB_PATH = Path(__file__).resolve().parent / "headshot.db"
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-INPUT_TTL_DAYS = 7
-OUTPUT_TTL_DAYS = 30
-MAX_TEAM_SIZE = 50
-
 PACKAGES = {
     "basic": {"name": "Basic", "headshotCount": 40, "priceCents": 2900, "delivery": "2–3 hr"},
     "professional": {"name": "Professional", "headshotCount": 100, "priceCents": 4900, "delivery": "1–2 hr"},
     "executive": {"name": "Executive", "headshotCount": 200, "priceCents": 7900, "delivery": "Priority"},
 }
-
-BRANDING_PRESETS = [
-    {"id": "linkedin", "label": "LinkedIn profile", "width": 400, "height": 400},
-    {"id": "email", "label": "Email signature", "width": 320, "height": 320},
-    {"id": "team", "label": "Team page card", "width": 800, "height": 600},
-]
 
 
 def get_db() -> sqlite3.Connection:
@@ -47,18 +37,12 @@ def get_db() -> sqlite3.Connection:
         CREATE TABLE IF NOT EXISTS orders (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             plan TEXT NOT NULL,
-            team_size INTEGER NOT NULL DEFAULT 1,
             amount_cents INTEGER NOT NULL,
             payment_status TEXT NOT NULL,
             created_at INTEGER NOT NULL
         )
         """
     )
-    try:
-        conn.execute("ALTER TABLE orders ADD COLUMN team_size INTEGER NOT NULL DEFAULT 1")
-    except sqlite3.OperationalError:
-        pass
-    conn.commit()
     conn.execute(
         """
         CREATE TABLE IF NOT EXISTS jobs (
@@ -98,17 +82,6 @@ def status_for_job(created_at: int) -> tuple[str, int]:
     return "completed", 0
 
 
-def calculate_order_amount(plan: str, team_size: int) -> int:
-    base_price = PACKAGES[plan]["priceCents"]
-    if team_size <= 1:
-        return base_price
-
-    team_multiplier = max(team_size, 1)
-    gross = base_price * team_multiplier
-    discounted = int(gross * 0.9)
-    return discounted
-
-
 class HeadShotHandler(SimpleHTTPRequestHandler):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, directory=str(BASE_DIR), **kwargs)
@@ -128,28 +101,14 @@ class HeadShotHandler(SimpleHTTPRequestHandler):
             self._send_json({"ok": True})
             return
 
-        if path == "/api/privacy":
-            self._send_json(
-                {
-                    "inputRetentionDays": INPUT_TTL_DAYS,
-                    "outputRetentionDays": OUTPUT_TTL_DAYS,
-                    "message": "Users can delete jobs and orders immediately from dashboard.",
-                }
-            )
-            return
-
         if path == "/api/packages":
             self._send_json({"packages": PACKAGES})
-            return
-
-        if path == "/api/branding-previews":
-            self._send_json({"previews": BRANDING_PRESETS})
             return
 
         if path == "/api/orders":
             with get_db() as conn:
                 rows = conn.execute(
-                    "SELECT id, plan, team_size, amount_cents, payment_status, created_at FROM orders ORDER BY id DESC LIMIT 20"
+                    "SELECT id, plan, amount_cents, payment_status, created_at FROM orders ORDER BY id DESC LIMIT 20"
                 ).fetchall()
             self._send_json(
                 {
@@ -157,7 +116,6 @@ class HeadShotHandler(SimpleHTTPRequestHandler):
                         {
                             "id": row["id"],
                             "plan": row["plan"],
-                            "teamSize": row["team_size"],
                             "amountCents": row["amount_cents"],
                             "paymentStatus": row["payment_status"],
                             "createdAt": row["created_at"],
@@ -247,29 +205,15 @@ class HeadShotHandler(SimpleHTTPRequestHandler):
                 self._send_json({"error": "Unknown package."}, HTTPStatus.BAD_REQUEST)
                 return
 
-            team_size_raw = payload.get("teamSize", 1)
-            try:
-                team_size = int(team_size_raw)
-            except (TypeError, ValueError):
-                self._send_json({"error": "teamSize must be a number."}, HTTPStatus.BAD_REQUEST)
-                return
-
-            if team_size < 1 or team_size > MAX_TEAM_SIZE:
-                self._send_json(
-                    {"error": f"teamSize must be between 1 and {MAX_TEAM_SIZE}."},
-                    HTTPStatus.BAD_REQUEST,
-                )
-                return
-
-            amount_cents = calculate_order_amount(plan, team_size)
+            package = PACKAGES[plan]
             now = int(time.time())
             with get_db() as conn:
                 cur = conn.execute(
                     """
-                    INSERT INTO orders (plan, team_size, amount_cents, payment_status, created_at)
-                    VALUES (?, ?, ?, ?, ?)
+                    INSERT INTO orders (plan, amount_cents, payment_status, created_at)
+                    VALUES (?, ?, ?, ?)
                     """,
-                    (plan, team_size, amount_cents, "paid", now),
+                    (plan, package["priceCents"], "paid", now),
                 )
                 conn.commit()
                 order_id = cur.lastrowid
@@ -278,8 +222,7 @@ class HeadShotHandler(SimpleHTTPRequestHandler):
                 {
                     "id": order_id,
                     "plan": plan,
-                    "teamSize": team_size,
-                    "amountCents": amount_cents,
+                    "amountCents": package["priceCents"],
                     "paymentStatus": "paid",
                     "message": "Payment successful. Order created.",
                 },
@@ -351,48 +294,6 @@ class HeadShotHandler(SimpleHTTPRequestHandler):
                 },
                 HTTPStatus.CREATED,
             )
-            return
-
-        self._send_json({"error": "Route not found."}, HTTPStatus.NOT_FOUND)
-
-    def do_DELETE(self) -> None:
-        path = urlparse(self.path).path
-
-        if path.startswith("/api/jobs/"):
-            try:
-                job_id = int(path.split("/")[-1])
-            except ValueError:
-                self._send_json({"error": "Invalid job id."}, HTTPStatus.BAD_REQUEST)
-                return
-
-            with get_db() as conn:
-                cur = conn.execute("DELETE FROM jobs WHERE id = ?", (job_id,))
-                conn.commit()
-
-            if cur.rowcount == 0:
-                self._send_json({"error": "Job not found."}, HTTPStatus.NOT_FOUND)
-                return
-
-            self._send_json({"ok": True, "deleted": "job", "id": job_id})
-            return
-
-        if path.startswith("/api/orders/"):
-            try:
-                order_id = int(path.split("/")[-1])
-            except ValueError:
-                self._send_json({"error": "Invalid order id."}, HTTPStatus.BAD_REQUEST)
-                return
-
-            with get_db() as conn:
-                conn.execute("DELETE FROM jobs WHERE order_id = ?", (order_id,))
-                cur = conn.execute("DELETE FROM orders WHERE id = ?", (order_id,))
-                conn.commit()
-
-            if cur.rowcount == 0:
-                self._send_json({"error": "Order not found."}, HTTPStatus.NOT_FOUND)
-                return
-
-            self._send_json({"ok": True, "deleted": "order", "id": order_id})
             return
 
         self._send_json({"error": "Route not found."}, HTTPStatus.NOT_FOUND)

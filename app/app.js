@@ -7,12 +7,9 @@ const plans = document.getElementById('plans');
 const preset = document.getElementById('preset');
 const background = document.getElementById('background');
 const outfit = document.getElementById('outfit');
-const teamSizeInput = document.getElementById('teamSize');
-const previewGrid = document.getElementById('previewGrid');
 const jobList = document.getElementById('jobList');
 const orderList = document.getElementById('orderList');
 const selectedPlanSummary = document.getElementById('selectedPlanSummary');
-const privacySummary = document.getElementById('privacySummary');
 
 let selectedPlan = 'basic';
 let packageCatalog = {};
@@ -28,17 +25,6 @@ function formatUsd(cents) {
   return `$${(cents / 100).toFixed(0)}`;
 }
 
-function calculateEstimate(cents, teamSize) {
-  if (teamSize <= 1) return cents;
-  return Math.floor(cents * teamSize * 0.9);
-}
-
-function teamSizeValue() {
-  const teamSize = Number.parseInt(teamSizeInput.value, 10);
-  if (Number.isNaN(teamSize)) return 1;
-  return Math.max(1, Math.min(50, teamSize));
-}
-
 function setStatus(message, mode = 'idle') {
   statusBox.className = `status ${mode}`;
   statusBox.textContent = message;
@@ -51,30 +37,7 @@ function updateSelectedPlanSummary() {
     return;
   }
 
-  const teamSize = teamSizeValue();
-  const total = calculateEstimate(pkg.priceCents, teamSize);
-  const teamLabel = teamSize > 1 ? ` · team of ${teamSize} (10% bundle discount)` : '';
-
-  selectedPlanSummary.textContent = `Selected package: ${pkg.name} (${formatUsd(total)})${teamLabel} • ${pkg.headshotCount} headshots each • ${pkg.delivery}`;
-}
-
-function buildDeleteButton(onDelete) {
-  const button = document.createElement('button');
-  button.className = 'secondary mini';
-  button.textContent = 'Delete';
-  button.type = 'button';
-  button.addEventListener('click', onDelete);
-  return button;
-}
-
-function renderBrandingPreviews(previews) {
-  previewGrid.innerHTML = '';
-  previews.forEach((preview) => {
-    const card = document.createElement('div');
-    card.className = 'preview-card';
-    card.innerHTML = `<strong>${preview.label}</strong><small>${preview.width}×${preview.height}</small><div class="preview-avatar"></div>`;
-    previewGrid.appendChild(card);
-  });
+  selectedPlanSummary.textContent = `Selected package: ${pkg.name} (${formatUsd(pkg.priceCents)}) • ${pkg.headshotCount} headshots • ${pkg.delivery}`;
 }
 
 function renderRecentOrders(orders) {
@@ -90,26 +53,7 @@ function renderRecentOrders(orders) {
   orders.forEach((order) => {
     const item = document.createElement('li');
     item.className = 'order-item';
-
-    const details = document.createElement('div');
-    details.innerHTML = `<strong>#${order.id}</strong> · ${order.plan}<br /><small>${formatUsd(order.amountCents)} · team size ${order.teamSize} · ${order.paymentStatus}</small>`;
-
-    const controls = document.createElement('div');
-    controls.className = 'item-controls';
-    controls.append(
-      buildDeleteButton(async () => {
-        const response = await fetch(`/api/orders/${order.id}`, { method: 'DELETE' });
-        if (!response.ok) {
-          setStatus(`Failed to delete order #${order.id}.`, 'idle');
-          return;
-        }
-        setStatus(`Order #${order.id} and related jobs deleted.`, 'done');
-        fetchRecentOrders();
-        fetchRecentJobs();
-      })
-    );
-
-    item.append(details, controls);
+    item.innerHTML = `<span><strong>#${order.id}</strong> · ${order.plan}</span><span>${formatUsd(order.amountCents)} · ${order.paymentStatus}</span>`;
     orderList.appendChild(item);
   });
 }
@@ -132,25 +76,11 @@ function renderRecentJobs(jobs) {
     const details = document.createElement('div');
     details.innerHTML = `<strong>#${job.id} · ${job.plan}</strong><br /><small>Order #${job.orderId ?? '-'} · ${job.style}/${job.background}/${job.outfit} · ${job.uploadCount} uploads</small>`;
 
-    const controls = document.createElement('div');
-    controls.className = 'item-controls';
-
     const chip = document.createElement('span');
     chip.className = `chip ${job.status}`;
     chip.textContent = job.status;
 
-    const deleteButton = buildDeleteButton(async () => {
-      const response = await fetch(`/api/jobs/${job.id}`, { method: 'DELETE' });
-      if (!response.ok) {
-        setStatus(`Failed to delete job #${job.id}.`, 'idle');
-        return;
-      }
-      setStatus(`Job #${job.id} deleted.`, 'done');
-      fetchRecentJobs();
-    });
-
-    controls.append(chip, deleteButton);
-    item.append(details, controls);
+    item.append(details, chip);
     jobList.appendChild(item);
   });
 }
@@ -161,20 +91,6 @@ async function fetchPackages() {
   const data = await response.json();
   packageCatalog = data.packages || {};
   updateSelectedPlanSummary();
-}
-
-async function fetchBrandingPreviews() {
-  const response = await fetch('/api/branding-previews');
-  if (!response.ok) return;
-  const data = await response.json();
-  renderBrandingPreviews(data.previews || []);
-}
-
-async function fetchPrivacy() {
-  const response = await fetch('/api/privacy');
-  if (!response.ok) return;
-  const data = await response.json();
-  privacySummary.textContent = `Input retention: ${data.inputRetentionDays} days · Generated outputs: ${data.outputRetentionDays} days`;
 }
 
 async function fetchRecentOrders() {
@@ -227,8 +143,6 @@ photoInput.addEventListener('change', () => {
   });
 });
 
-teamSizeInput.addEventListener('input', updateSelectedPlanSummary);
-
 plans.addEventListener('click', (event) => {
   const button = event.target.closest('.plan');
   if (!button) return;
@@ -259,15 +173,12 @@ submitBtn.addEventListener('click', async () => {
     return;
   }
 
-  const teamSize = teamSizeValue();
-  const estimatedTotal = calculateEstimate(pkg.priceCents, teamSize);
-
-  setStatus(`Processing payment for ${pkg.name} (${formatUsd(estimatedTotal)})...`, 'processing');
+  setStatus(`Processing payment for ${pkg.name} (${formatUsd(pkg.priceCents)})...`, 'processing');
 
   const orderResponse = await fetch('/api/orders', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ plan: selectedPlan, teamSize })
+    body: JSON.stringify({ plan: selectedPlan })
   });
 
   if (!orderResponse.ok) {
@@ -278,7 +189,7 @@ submitBtn.addEventListener('click', async () => {
 
   const order = await orderResponse.json();
 
-  setStatus(`Payment captured (Order #${order.id}, team size ${order.teamSize}). Starting generation...`, 'processing');
+  setStatus(`Payment captured (Order #${order.id}). Starting generation...`, 'processing');
 
   const jobResponse = await fetch('/api/jobs', {
     method: 'POST',
@@ -307,8 +218,6 @@ submitBtn.addEventListener('click', async () => {
   pollJob(job.id);
 });
 
-fetchPrivacy();
 fetchPackages();
-fetchBrandingPreviews();
 fetchRecentOrders();
 fetchRecentJobs();

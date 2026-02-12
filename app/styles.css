@@ -92,8 +92,7 @@ label {
 }
 
 select,
-input[type='file'],
-input[type='number'] {
+input[type='file'] {
   width: 100%;
   margin-top: 0.35rem;
   padding: 0.55rem;
@@ -146,11 +145,6 @@ input[type='number'] {
   background: #fff;
 }
 
-.secondary.mini {
-  padding: 0.26rem 0.55rem;
-  font-size: 0.8rem;
-}
-
 .status {
   margin-top: 0.75rem;
   border-radius: 10px;
@@ -171,32 +165,6 @@ input[type='number'] {
 .status.done {
   background: #dff7eb;
   color: var(--ok);
-}
-
-.preview-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-  gap: 0.7rem;
-}
-
-.preview-card {
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  padding: 0.6rem;
-  display: grid;
-  gap: 0.35rem;
-}
-
-.preview-card small {
-  color: var(--muted);
-}
-
-.preview-avatar {
-  width: 100%;
-  aspect-ratio: 4 / 3;
-  border-radius: 8px;
-  background: linear-gradient(135deg, #dde5ff, #eff3ff);
-  border: 1px solid var(--border);
 }
 
 .upload-list,
@@ -224,15 +192,8 @@ input[type='number'] {
   align-items: center;
 }
 
-.job-item small,
-.order-item small {
+.job-item small {
   color: var(--muted);
-}
-
-.item-controls {
-  display: flex;
-  align-items: center;
-  gap: 0.4rem;
 }
 
 .chip {
