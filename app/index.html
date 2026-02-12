@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>HeadShot | AI Professional Headshots</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="brand">HeadShot</div>
+      <button class="secondary">Sign in</button>
+    </header>
+
+    <main class="layout">
+      <section class="card hero">
+        <h1>Create studio-quality headshots in minutes</h1>
+        <p>
+          Upload your selfies, choose style presets, and receive polished professional
+          portraits for LinkedIn, portfolios, and team pages.
+        </p>
+        <div class="badges">
+          <span>Fast turnaround</span>
+          <span>Commercial rights included</span>
+          <span>Privacy-first deletion</span>
+        </div>
+      </section>
+
+      <section class="card">
+        <h2>1) Upload your selfies</h2>
+        <p class="hint">Upload 8–20 clear photos. We’ll check quality automatically.</p>
+        <input id="photoInput" type="file" multiple accept="image/png,image/jpeg,image/heic" />
+        <ul id="uploadList" class="upload-list"></ul>
+      </section>
+
+      <section class="card two-col">
+        <div>
+          <h2>2) Choose style settings</h2>
+          <label>Preset style
+            <select id="preset">
+              <option value="linkedin">LinkedIn</option>
+              <option value="business">Business</option>
+              <option value="creative">Creative</option>
+              <option value="executive">Executive</option>
+            </select>
+          </label>
+          <label>Background
+            <select id="background">
+              <option value="studio">Studio</option>
+              <option value="outdoor">Outdoor</option>
+              <option value="plain">Plain</option>
+              <option value="branded">Branded set</option>
+            </select>
+          </label>
+          <label>Outfit
+            <select id="outfit">
+              <option value="suit">Suit</option>
+              <option value="smart-casual">Smart casual</option>
+              <option value="tech">Tech look</option>
+              <option value="creative">Creative</option>
+            </select>
+          </label>
+        </div>
+
+        <div>
+          <h2>3) Pick a package</h2>
+          <div class="plans" id="plans">
+            <button class="plan selected" data-plan="basic">
+              <strong>Basic</strong>
+              <span>40 headshots</span>
+              <span>2–3 hr delivery</span>
+              <span class="price">$29</span>
+            </button>
+            <button class="plan" data-plan="professional">
+              <strong>Professional</strong>
+              <span>100 headshots</span>
+              <span>1–2 hr delivery</span>
+              <span class="price">$49</span>
+            </button>
+            <button class="plan" data-plan="executive">
+              <strong>Executive</strong>
+              <span>200 headshots</span>
+              <span>Priority delivery</span>
+              <span class="price">$79</span>
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <section class="card">
+        <h2>4) Pay and start generation</h2>
+        <p id="selectedPlanSummary" class="hint">Selected package: Basic ($29)</p>
+        <button id="submitBtn" class="primary">Pay & Start Generation</button>
+        <div id="status" class="status idle">Waiting for input</div>
+      </section>
+
+      <section class="card two-col">
+        <div>
+          <h2>Recent orders</h2>
+          <p class="hint">Payments captured in local API for this prototype.</p>
+          <ul id="orderList" class="order-list"></ul>
+        </div>
+
+        <div>
+          <h2>Recent jobs</h2>
+          <p class="hint">The latest generation requests.</p>
+          <ul id="jobList" class="job-list"></ul>
+        </div>
+      </section>
+    </main>
+
+    <template id="uploadItemTemplate">
+      <li class="upload-item">
+        <span class="filename"></span>
+        <span class="quality"></span>
+      </li>
+    </template>
+
+    <script src="app.js"></script>
+  </body>
+</html>
