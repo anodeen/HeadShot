@@ -1,160 +1,223 @@
-const el = (id) => document.getElementById(id);
-const photoInput = el('photoInput');
-const uploadList = el('uploadList');
-const template = el('uploadItemTemplate');
-const submitBtn = el('submitBtn');
-const statusBox = el('status');
-const plans = el('plans');
-const preset = el('preset');
-const background = el('background');
-const outfit = el('outfit');
-const teamSizeInput = el('teamSize');
-const previewGrid = el('previewGrid');
-const jobList = el('jobList');
-const orderList = el('orderList');
-const selectedPlanSummary = el('selectedPlanSummary');
-const privacySummary = el('privacySummary');
-const supportForm = el('supportForm');
-const supportEmail = el('supportEmail');
-const supportOrderId = el('supportOrderId');
-const supportMessage = el('supportMessage');
-const metricsBox = el('metrics');
-const registerForm = el('registerForm');
-const loginForm = el('loginForm');
-const logoutBtn = el('logoutBtn');
+const photoInput = document.getElementById('photoInput');
+const uploadList = document.getElementById('uploadList');
+const template = document.getElementById('uploadItemTemplate');
+const submitBtn = document.getElementById('submitBtn');
+const statusBox = document.getElementById('status');
+const plans = document.getElementById('plans');
+const preset = document.getElementById('preset');
+const background = document.getElementById('background');
+const outfit = document.getElementById('outfit');
+const jobList = document.getElementById('jobList');
+const orderList = document.getElementById('orderList');
+const selectedPlanSummary = document.getElementById('selectedPlanSummary');
 
 let selectedPlan = 'basic';
 let packageCatalog = {};
-let token = localStorage.getItem('headshot_token') || '';
 let pollingId = null;
 
-const authHeaders = () => (token ? { Authorization: `Bearer ${token}` } : {});
-async function api(path, opts = {}) {
-  const headers = { ...(opts.headers || {}), ...authHeaders() };
-  return fetch(path, { ...opts, headers });
+function assessQuality(file) {
+  if (file.size > 8 * 1024 * 1024) return 'Too large (>8MB)';
+  if (!/image\/(png|jpeg|heic|heif)/i.test(file.type)) return 'Unsupported format';
+  return 'Looks good';
 }
 
-function setStatus(message, mode = 'idle') { statusBox.className = `status ${mode}`; statusBox.textContent = message; }
-function teamSizeValue() { const n = Number.parseInt(teamSizeInput.value, 10); return Number.isNaN(n) ? 1 : Math.max(1, Math.min(50, n)); }
-const formatUsd = (cents) => `$${(cents / 100).toFixed(0)}`;
-function assessQuality(file) { if (file.size > 8 * 1024 * 1024) return 'Too large (>8MB)'; if (!/image\/(png|jpeg|heic|heif)/i.test(file.type)) return 'Unsupported format'; return 'Looks good'; }
+function formatUsd(cents) {
+  return `$${(cents / 100).toFixed(0)}`;
+}
+
+function setStatus(message, mode = 'idle') {
+  statusBox.className = `status ${mode}`;
+  statusBox.textContent = message;
+}
 
 function updateSelectedPlanSummary() {
-  const pkg = packageCatalog[selectedPlan]; if (!pkg) return;
-  const team = teamSizeValue(); const total = team <= 1 ? pkg.priceCents : Math.floor(pkg.priceCents * team * 0.9);
-  selectedPlanSummary.textContent = `Selected package: ${pkg.name} (${formatUsd(total)}) • team ${team}`;
-}
-function action(label, fn) { const b = document.createElement('button'); b.className = 'secondary mini'; b.type = 'button'; b.textContent = label; b.onclick = fn; return b; }
+  const pkg = packageCatalog[selectedPlan];
+  if (!pkg) {
+    selectedPlanSummary.textContent = 'Selected package: loading...';
+    return;
+  }
 
-function renderMetrics(m) { metricsBox.innerHTML = `<h2>Dashboard metrics</h2><div class="metric-grid"><div><strong>${m.orders}</strong><small>Orders</small></div><div><strong>${m.jobs}</strong><small>Jobs</small></div><div><strong>${m.completedJobs}</strong><small>Completed</small></div><div><strong>${m.supportTickets}</strong><small>Support tickets</small></div></div>`; }
-function renderBrandingPreviews(previews) { previewGrid.innerHTML = ''; previews.forEach((p) => { const c = document.createElement('div'); c.className = 'preview-card'; c.innerHTML = `<strong>${p.label}</strong><small>${p.width}×${p.height}</small><div class="preview-avatar"></div>`; previewGrid.appendChild(c); }); }
+  selectedPlanSummary.textContent = `Selected package: ${pkg.name} (${formatUsd(pkg.priceCents)}) • ${pkg.headshotCount} headshots • ${pkg.delivery}`;
+}
 
 function renderRecentOrders(orders) {
   orderList.innerHTML = '';
-  if (!orders.length) return (orderList.innerHTML = '<li class="order-item">No orders yet.</li>');
-  orders.forEach((o) => {
-    const li = document.createElement('li'); li.className = 'order-item';
-    const d = document.createElement('div'); d.innerHTML = `<strong>#${o.id}</strong> · ${o.plan}<br /><small>${formatUsd(o.amountCents)} · team ${o.teamSize} · rerun credits ${o.rerunCredits}</small>`;
-    const c = document.createElement('div'); c.className = 'item-controls';
-    c.append(action('Delete', async () => { const r = await api(`/api/orders/${o.id}`, { method: 'DELETE' }); if (!r.ok) return setStatus('Delete order failed', 'idle'); setStatus(`Order #${o.id} deleted.`, 'done'); refreshAll(); }));
-    li.append(d, c); orderList.appendChild(li);
-  });
-}
+  if (!orders.length) {
+    const item = document.createElement('li');
+    item.className = 'order-item';
+    item.textContent = 'No orders yet.';
+    orderList.appendChild(item);
+    return;
+  }
 
-async function showAssets(jobId) {
-  const r = await api(`/api/jobs/${jobId}/assets`); const b = await r.json().catch(() => ({}));
-  if (!r.ok) return setStatus(b.error || 'Assets unavailable.', 'idle');
-  setStatus(`Assets for #${jobId}: ${b.assets.map((a) => a.variant).join(', ')}`, 'done');
+  orders.forEach((order) => {
+    const item = document.createElement('li');
+    item.className = 'order-item';
+    item.innerHTML = `<span><strong>#${order.id}</strong> · ${order.plan}</span><span>${formatUsd(order.amountCents)} · ${order.paymentStatus}</span>`;
+    orderList.appendChild(item);
+  });
 }
 
 function renderRecentJobs(jobs) {
   jobList.innerHTML = '';
-  if (!jobs.length) return (jobList.innerHTML = '<li class="job-item">No jobs yet.</li>');
-  jobs.forEach((j) => {
-    const li = document.createElement('li'); li.className = 'job-item';
-    const d = document.createElement('div'); d.innerHTML = `<strong>#${j.id}</strong><br /><small>Order #${j.orderId} · ${j.status}</small>`;
-    const c = document.createElement('div'); c.className = 'item-controls';
-    const chip = document.createElement('span'); chip.className = `chip ${j.status}`; chip.textContent = j.status;
-    c.append(chip,
-      action('Assets', () => showAssets(j.id)),
-      action('Rerun', async () => { const r = await api('/api/rerun', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ jobId: j.id }) }); const b = await r.json().catch(() => ({})); if (!r.ok) return setStatus(b.error || 'Rerun failed', 'idle'); setStatus(`Rerun started as #${b.id}`, 'processing'); refreshAll(); pollJob(b.id); }),
-      action('Delete', async () => { const r = await api(`/api/jobs/${j.id}`, { method: 'DELETE' }); if (!r.ok) return setStatus('Delete job failed', 'idle'); setStatus(`Job #${j.id} deleted`, 'done'); refreshAll(); })
-    );
-    li.append(d, c); jobList.appendChild(li);
+
+  if (!jobs.length) {
+    const item = document.createElement('li');
+    item.className = 'job-item';
+    item.textContent = 'No jobs yet. Submit your first generation.';
+    jobList.appendChild(item);
+    return;
+  }
+
+  jobs.forEach((job) => {
+    const item = document.createElement('li');
+    item.className = 'job-item';
+
+    const details = document.createElement('div');
+    details.innerHTML = `<strong>#${job.id} · ${job.plan}</strong><br /><small>Order #${job.orderId ?? '-'} · ${job.style}/${job.background}/${job.outfit} · ${job.uploadCount} uploads</small>`;
+
+    const chip = document.createElement('span');
+    chip.className = `chip ${job.status}`;
+    chip.textContent = job.status;
+
+    item.append(details, chip);
+    jobList.appendChild(item);
   });
 }
 
-async function fetchPackages() { const r = await fetch('/api/packages'); if (!r.ok) return; packageCatalog = (await r.json()).packages || {}; updateSelectedPlanSummary(); }
-async function fetchBranding() { const r = await fetch('/api/branding-previews'); if (!r.ok) return; renderBrandingPreviews((await r.json()).previews || []); }
-async function fetchPrivacy() { const r = await fetch('/api/privacy'); if (!r.ok) return; const d = await r.json(); privacySummary.textContent = `Input retention: ${d.inputRetentionDays} days · Generated outputs: ${d.outputRetentionDays} days`; }
-async function fetchMetrics() { const r = await api('/api/metrics'); if (!r.ok) return; renderMetrics(await r.json()); }
-async function fetchOrders() { const r = await api('/api/orders'); if (!r.ok) return; renderRecentOrders((await r.json()).orders || []); }
-async function fetchJobs() { const r = await api('/api/jobs'); if (!r.ok) return; renderRecentJobs((await r.json()).jobs || []); }
-async function refreshAll() { if (!token) return; await Promise.all([fetchMetrics(), fetchOrders(), fetchJobs()]); }
+async function fetchPackages() {
+  const response = await fetch('/api/packages');
+  if (!response.ok) return;
+  const data = await response.json();
+  packageCatalog = data.packages || {};
+  updateSelectedPlanSummary();
+}
+
+async function fetchRecentOrders() {
+  const response = await fetch('/api/orders');
+  if (!response.ok) return;
+  const data = await response.json();
+  renderRecentOrders(data.orders || []);
+}
+
+async function fetchRecentJobs() {
+  const response = await fetch('/api/jobs');
+  if (!response.ok) return;
+  const data = await response.json();
+  renderRecentJobs(data.jobs || []);
+}
 
 async function pollJob(jobId) {
-  if (pollingId) window.clearInterval(pollingId);
+  if (pollingId) {
+    window.clearInterval(pollingId);
+  }
+
   pollingId = window.setInterval(async () => {
-    const r = await api(`/api/jobs/${jobId}`); if (!r.ok) return;
-    const j = await r.json(); if (j.status !== 'completed') return setStatus(`Job #${j.id} ${j.status} (~${j.secondsRemaining}s)`, 'processing');
-    setStatus(`Job #${j.id} completed.`, 'done'); window.clearInterval(pollingId); refreshAll();
+    const response = await fetch(`/api/jobs/${jobId}`);
+    if (!response.ok) {
+      setStatus('Unable to fetch job status.', 'idle');
+      window.clearInterval(pollingId);
+      return;
+    }
+
+    const job = await response.json();
+    if (job.status === 'queued' || job.status === 'processing') {
+      setStatus(`Job #${job.id} is ${job.status}. ~${job.secondsRemaining}s remaining.`, 'processing');
+      return;
+    }
+
+    setStatus(`Job #${job.id} completed. Your headshots are ready to preview and download.`, 'done');
+    window.clearInterval(pollingId);
+    fetchRecentJobs();
   }, 1800);
 }
 
-registerForm.addEventListener('submit', async (e) => {
-  e.preventDefault();
-  const r = await fetch('/api/auth/register', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: el('registerEmail').value, password: el('registerPassword').value }) });
-  const b = await r.json().catch(() => ({}));
-  setStatus(r.ok ? 'Registration successful. Now log in.' : `Register failed: ${b.error || 'Unknown error'}`, r.ok ? 'done' : 'idle');
-});
-
-loginForm.addEventListener('submit', async (e) => {
-  e.preventDefault();
-  const r = await fetch('/api/auth/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: el('loginEmail').value, password: el('loginPassword').value }) });
-  const b = await r.json().catch(() => ({}));
-  if (!r.ok) return setStatus(`Login failed: ${b.error || 'Unknown error'}`, 'idle');
-  token = b.token; localStorage.setItem('headshot_token', token); setStatus(`Logged in as ${b.user.email}`, 'done'); refreshAll();
-});
-
-logoutBtn.addEventListener('click', async () => {
-  if (token) await api('/api/auth/logout', { method: 'POST' });
-  token = ''; localStorage.removeItem('headshot_token');
-  setStatus('Logged out.', 'idle'); orderList.innerHTML = ''; jobList.innerHTML = ''; metricsBox.innerHTML = '';
-});
-
 photoInput.addEventListener('change', () => {
   uploadList.innerHTML = '';
-  [...photoInput.files].forEach((f) => { const n = template.content.firstElementChild.cloneNode(true); n.querySelector('.filename').textContent = f.name; n.querySelector('.quality').textContent = assessQuality(f); uploadList.appendChild(n); });
+
+  [...photoInput.files].forEach((file) => {
+    const node = template.content.firstElementChild.cloneNode(true);
+    node.querySelector('.filename').textContent = file.name;
+    node.querySelector('.quality').textContent = assessQuality(file);
+    uploadList.appendChild(node);
+  });
 });
-teamSizeInput.addEventListener('input', updateSelectedPlanSummary);
-plans.addEventListener('click', (e) => { const b = e.target.closest('.plan'); if (!b) return; [...plans.querySelectorAll('.plan')].forEach((x) => x.classList.remove('selected')); b.classList.add('selected'); selectedPlan = b.dataset.plan; updateSelectedPlanSummary(); });
+
+plans.addEventListener('click', (event) => {
+  const button = event.target.closest('.plan');
+  if (!button) return;
+
+  [...plans.querySelectorAll('.plan')].forEach((item) => item.classList.remove('selected'));
+  button.classList.add('selected');
+
+  selectedPlan = button.dataset.plan;
+  updateSelectedPlanSummary();
+});
 
 submitBtn.addEventListener('click', async () => {
-  if (!token) return setStatus('Please log in first.', 'idle');
   const files = [...photoInput.files];
-  if (files.length < 8) return setStatus('Please upload at least 8 selfies.', 'idle');
-  if (files.find((f) => assessQuality(f) !== 'Looks good')) return setStatus('One or more files are invalid.', 'idle');
+  if (files.length < 8) {
+    setStatus('Please upload at least 8 selfies to start generation.', 'idle');
+    return;
+  }
 
-  const orderResp = await api('/api/orders', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ plan: selectedPlan, teamSize: teamSizeValue() }) });
-  const order = await orderResp.json().catch(() => ({}));
-  if (!orderResp.ok) return setStatus(`Payment failed: ${order.error || 'Unknown error'}`, 'idle');
+  const invalidFile = files.find((file) => assessQuality(file) !== 'Looks good');
+  if (invalidFile) {
+    setStatus('One or more files are invalid. Fix upload issues before submitting.', 'idle');
+    return;
+  }
 
-  const jobResp = await api('/api/jobs', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ orderId: order.id, plan: selectedPlan, style: preset.value, background: background.value, outfit: outfit.value, uploadCount: files.length }) });
-  const job = await jobResp.json().catch(() => ({}));
-  if (!jobResp.ok) return setStatus(`Job creation failed: ${job.error || 'Unknown error'}`, 'idle');
-  setStatus(`Job #${job.id} queued.`, 'processing'); refreshAll(); pollJob(job.id);
+  const pkg = packageCatalog[selectedPlan];
+  if (!pkg) {
+    setStatus('Package data is unavailable. Refresh and try again.', 'idle');
+    return;
+  }
+
+  setStatus(`Processing payment for ${pkg.name} (${formatUsd(pkg.priceCents)})...`, 'processing');
+
+  const orderResponse = await fetch('/api/orders', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ plan: selectedPlan })
+  });
+
+  if (!orderResponse.ok) {
+    const error = await orderResponse.json().catch(() => ({ error: 'Unknown error' }));
+    setStatus(`Payment failed: ${error.error}`, 'idle');
+    return;
+  }
+
+  const order = await orderResponse.json();
+
+  setStatus(`Payment captured (Order #${order.id}). Starting generation...`, 'processing');
+
+  const jobResponse = await fetch('/api/jobs', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      orderId: order.id,
+      plan: selectedPlan,
+      style: preset.value,
+      background: background.value,
+      outfit: outfit.value,
+      uploadCount: files.length
+    })
+  });
+
+  if (!jobResponse.ok) {
+    const error = await jobResponse.json().catch(() => ({ error: 'Unknown error' }));
+    setStatus(`Job creation failed: ${error.error}`, 'idle');
+    fetchRecentOrders();
+    return;
+  }
+
+  const job = await jobResponse.json();
+  setStatus(`Job #${job.id} queued under Order #${order.id}. Estimated start in ${job.secondsRemaining}s.`, 'processing');
+  fetchRecentOrders();
+  fetchRecentJobs();
+  pollJob(job.id);
 });
 
-supportForm.addEventListener('submit', async (e) => {
-  e.preventDefault();
-  if (!token) return setStatus('Please log in first.', 'idle');
-  const r = await api('/api/support', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: supportEmail.value, orderId: supportOrderId.value || null, message: supportMessage.value }) });
-  const b = await r.json().catch(() => ({}));
-  if (!r.ok) return setStatus(`Support failed: ${b.error || 'Unknown error'}`, 'idle');
-  setStatus(`Support ticket #${b.id} created.`, 'done'); supportForm.reset(); refreshAll();
-});
-
-fetchPrivacy();
 fetchPackages();
-fetchBranding();
-if (token) refreshAll();
+fetchRecentOrders();
+fetchRecentJobs();
