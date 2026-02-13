@@ -26,8 +26,6 @@
         </div>
       </section>
 
-      <section class="card metrics" id="metrics"></section>
-
       <section class="card">
         <h2>1) Upload your selfies</h2>
         <p class="hint">Upload 8–20 clear photos. We’ll check quality automatically.</p>
@@ -62,9 +60,6 @@
               <option value="creative">Creative</option>
             </select>
           </label>
-          <label>Team size
-            <input id="teamSize" type="number" value="1" min="1" max="50" />
-          </label>
         </div>
 
         <div>
@@ -95,15 +90,8 @@
       <section class="card">
         <h2>4) Pay and start generation</h2>
         <p id="selectedPlanSummary" class="hint">Selected package: Basic ($29)</p>
-        <p id="privacySummary" class="hint">Input retention: 7 days · Generated outputs: 30 days</p>
         <button id="submitBtn" class="primary">Pay & Start Generation</button>
         <div id="status" class="status idle">Waiting for input</div>
-      </section>
-
-      <section class="card">
-        <h2>Branding preview layouts</h2>
-        <p class="hint">Preview how a completed headshot could look in key surfaces.</p>
-        <div id="previewGrid" class="preview-grid"></div>
       </section>
 
       <section class="card two-col">
@@ -115,20 +103,9 @@
 
         <div>
           <h2>Recent jobs</h2>
-          <p class="hint">Use rerun credits when a result doesn’t feel like you.</p>
+          <p class="hint">The latest generation requests.</p>
           <ul id="jobList" class="job-list"></ul>
         </div>
-      </section>
-
-      <section class="card">
-        <h2>Support</h2>
-        <p class="hint">Report quality issues and request help from support.</p>
-        <form id="supportForm" class="support-form">
-          <input id="supportEmail" type="email" placeholder="Email" required />
-          <input id="supportOrderId" type="number" placeholder="Order ID (optional)" min="1" />
-          <textarea id="supportMessage" placeholder="Describe your issue" rows="3" required></textarea>
-          <button class="secondary" type="submit">Submit support request</button>
-        </form>
       </section>
     </main>
 
